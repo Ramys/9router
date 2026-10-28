@@ -47,6 +47,8 @@ export default {
     { id: "claude-3-haiku-free", name: "Claude 3 Haiku Free", targetFormat: "claude", note: "⚠️ Free tier quota limited; count toward daily free usage." },
     { id: "llama-3.1-8b-free", name: "Llama 3.1 8B Instruct Free", targetFormat: "openai", note: "⚠️ Free tier; may be rate-limited. Good for lightweight tasks." },
     { id: "mixtral-8x7b-free", name: "Mixtral 8x7B Instruct Free", targetFormat: "openai", note: "⚠️ Free tier; community model via OpenRouter backend (if enabled)." },
+    // --- Additional DeepSeek free-tier model ---
+    { id: "deepseek-v4.1-flash-free", name: "DeepSeek V4.1 Flash Free", targetFormat: "openai", note: "⚠️ Free tier; quota limited; supports reasoning_effort levels." },
   ],
   serviceKinds: ["llm", "systemone"],
   systemoneConfig: {
