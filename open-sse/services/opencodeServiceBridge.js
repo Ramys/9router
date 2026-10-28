@@ -1119,8 +1119,9 @@ export async function getDaemonForProxy(proxyUrl = "", { noProxy = "", apiKey } 
 
       const p = spawn("opencode", ["serve", "--port", "0", "--print-logs"], {
         env,
-        cwd: "/tmp",
+        cwd: os.tmpdir(),
         stdio: ["ignore", "pipe", "pipe"],
+        shell: process.platform === "win32",
       });
 
       let buffer = "";

@@ -22,4 +22,10 @@ describe("OpenCodeExecutor Architecture & Routing", () => {
     const credService = { providerSpecificData: { useServiceDaemon: true } };
     expect(credService.providerSpecificData.useServiceDaemon).toBe(true);
   });
+
+  it("falls back to TLS HTTP instead of 502 when the local daemon is down", () => {
+    const src = new OpenCodeExecutor().execute.toString();
+    expect(src).toContain("falling back to TLS HTTP");
+    expect(src).not.toContain("Please start opencode service or disable Local Service Daemon");
+  });
 });

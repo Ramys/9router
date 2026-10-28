@@ -490,10 +490,11 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   // The free gate keys on the TLS ClientHello, so a native Node fetch is refused
-  // no matter how faithful the body is. Route through the impersonating client
-  // and keep proxy handling on the existing path (proxyAwareFetch delegates to
-  // `directFetch` when no proxy is configured). Fail-open: without wreq-js the
-  // request still goes out on native fetch instead of erroring here.
+  // no matter how faithful the body is. Route through the impersonating client.
+  // proxyAwareFetch forwards `directFetch` even when a proxy is set so the
+  // same TLS fingerprint rides the pool (wreq-js `proxy` option). Fail-open:
+  // without wreq-js the request still goes out on native fetch instead of
+  // erroring here.
   async execute(args) {
     const { model, body, credentials, signal, proxyOptions } = args;
     const apiKey = credentials?.apiKey || credentials?.accessToken || credentials?.providerSpecificData?.apiKey;
@@ -512,44 +513,44 @@ export class OpenCodeExecutor extends BaseExecutor {
     const useServiceDaemon = credentials?.providerSpecificData?.useServiceDaemon !== false;
 
     // Dual-Mode Architecture:
-    // If user enabled Local Service Daemon (useServiceDaemon === true) and not in test env,
-    // route free requests to the service REST bridge.
-    // If user toggled off Local Service Daemon, execute directly via HTTP wire (super.execute).
+    // Prefer the local OpenCode daemon when it is actually reachable. A missing
+    // or crashed daemon used to 502 the whole free lane; fall through to the
+    // TLS HTTP path instead so the request still reaches opencode.ai.
     if (!isTestEnv && !hasExplicitApiKey && useServiceDaemon) {
       const daemon = await getDaemonForProxy(proxyUrl, { noProxy: proxyNoProxy, apiKey });
       const isAlive = await isOpencodeServiceAlive(daemon);
 
-      if (!isAlive) {
-        throw new Error("OpenCode local service daemon is not running or unreachable. Please start opencode service or disable Local Service Daemon in dashboard.");
+      if (isAlive) {
+        const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
+        const timeStr = new Date().toLocaleTimeString("en-GB");
+        console.log(`[${timeStr}] ℹ️ [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
+
+        const messages = prepareServiceMessages(body);
+        const serviceResponse = await executeServiceStream({
+          model,
+          body,
+          messages,
+          tools: body?.tools || [],
+          toolChoice: prepareServiceToolChoice(body?.tool_choice),
+          credentials: this.prepareRequestCredentials({ body, credentials }),
+          proxyUrl,
+          proxyNoProxy,
+          signal,
+        });
+        const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
+        return {
+          response: serviceResponse,
+          url: "http://127.0.0.1/api/session/prompt",
+          headers: {
+            "Content-Type": "text/event-stream",
+            "x-opencode-session": session,
+          },
+          transformedBody: body,
+          responseFormat: FORMATS.OPENAI,
+        };
       }
-
-      const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
       const timeStr = new Date().toLocaleTimeString("en-GB");
-      console.log(`[${timeStr}] ℹ️ [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
-
-      const messages = prepareServiceMessages(body);
-      const serviceResponse = await executeServiceStream({
-        model,
-        body,
-        messages,
-        tools: body?.tools || [],
-        toolChoice: prepareServiceToolChoice(body?.tool_choice),
-        credentials: this.prepareRequestCredentials({ body, credentials }),
-        proxyUrl,
-        proxyNoProxy,
-        signal,
-      });
-      const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
-      return {
-        response: serviceResponse,
-        url: "http://127.0.0.1/api/session/prompt",
-        headers: {
-          "Content-Type": "text/event-stream",
-          "x-opencode-session": session,
-        },
-        transformedBody: body,
-        responseFormat: FORMATS.OPENAI,
-      };
+      console.log(`[${timeStr}] ⚠️ [BRIDGE] OPENCODE daemon unreachable — falling back to TLS HTTP`);
     }
 
     const timeStr = new Date().toLocaleTimeString("en-GB");
@@ -572,7 +573,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         method: options.method,
         headers: options.headers,
         body: options.body,
-      }, { signal: options.signal }),
+      }, { signal: options.signal, proxy: options.proxyUrl || proxyUrl }),
     });
   }
 
