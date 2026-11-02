@@ -1,11 +1,11 @@
-import { Readable } from "stream";
+﻿import { Readable } from "stream";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
 
-// ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
+// â”€â”€â”€ TLS fingerprinting via got-scraping (browser-like JA3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Disabled: not in use. Kept commented for future re-enable.
 // Restore the original block to re-enable per-host JA3 spoofing.
 /*
@@ -97,7 +97,7 @@ async function tryGotScrapingFetch(url, options) {
 }
 */
 
-// DNS cache — use Map to avoid prototype pollution via malformed hostnames
+// DNS cache â€” use Map to avoid prototype pollution via malformed hostnames
 const DNS_CACHE = new Map();
 const TLS_CERT_ERRORS = new Set([
   "SELF_SIGNED_CERT_IN_CHAIN",
@@ -253,7 +253,7 @@ async function getDispatcher(proxyUrl, insecure = false) {
 
 async function fetchWithTlsFallback(url, options, proxyUrl) {
   try {
-<<<<<<< HEAD
+
     // Protocol adapters that own their transport receive the resolved proxy so
     // they can keep the same egress. A null result falls through to the native
     // path, which keeps fail-open behaviour.
@@ -378,7 +378,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   // MITM DNS bypass: for known MITM-intercepted hosts, resolve real IP to avoid DNS spoof
   if (shouldBypassMitmDns(targetUrl)) {
     if (proxyUrl) {
-      // Proxy resolves DNS externally (not affected by /etc/hosts) — use proxy directly
+      // Proxy resolves DNS externally (not affected by /etc/hosts) â€” use proxy directly
       try {
         return await fetchWithTlsFallback(url, options, proxyUrl);
       } catch (proxyError) {
@@ -388,7 +388,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
         console.warn(`[ProxyFetch] Proxy failed, falling back to direct bypass: ${proxyError.message}`);
       }
     }
-    // No proxy — manually resolve real IP to bypass DNS spoof
+    // No proxy â€” manually resolve real IP to bypass DNS spoof
     try {
       const parsedUrl = new URL(targetUrl);
       const realIP = await resolveRealIP(parsedUrl.hostname);
@@ -412,8 +412,8 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   }
 
   // Strict mode means "never leave over the direct IP". Reaching here with a
-  // proxy configured but unresolved is exactly that case — an inactive or
-  // empty pool, or every proxy removed — so refuse instead of silently
+  // proxy configured but unresolved is exactly that case â€” an inactive or
+  // empty pool, or every proxy removed â€” so refuse instead of silently
   // exposing the real address (#4333). The catch blocks above only cover a
   // proxy that was actually tried.
   //
@@ -429,7 +429,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     throw new Error("[ProxyFetch] Proxy required but none resolved (strictProxy=true)");
   }
 
-  // got-scraping disabled — use native fetch directly
+  // got-scraping disabled â€” use native fetch directly
   // (Re-enable per-host by wrapping with tryGotScrapingFetch when needed)
   return fetchWithTlsFallback(url, options, null);
 }
@@ -441,7 +441,7 @@ async function patchedFetch(url, options = {}) {
   return proxyAwareFetch(url, options, null);
 }
 
-// Idempotency guard — only patch once to avoid wrapping multiple times
+// Idempotency guard â€” only patch once to avoid wrapping multiple times
 if (globalThis.fetch !== patchedFetch) {
   globalThis.fetch = patchedFetch;
 }

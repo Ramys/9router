@@ -1,4 +1,4 @@
-import {
+﻿import {
   isOpencodeServiceAlive,
   getDaemonForProxy,
   executeServiceStream,
@@ -60,7 +60,7 @@ function unstableRandom() {
 
 // Session prefix = 12 hex of ~(timeMs * 0x1000 + counter), low 48 bits, like the CLI.
 // Upstream decodes it and rejects a non-small counter with 403 FreeTierError
-// (live probes: counter 0–16 pass, >=100 fail), so the counter must stay real.
+// (live probes: counter 0â€“16 pass, >=100 fail), so the counter must stay real.
 const SESSION_PREFIX_MASK = (1n << 48n) - 1n;
 
 function descendingTimeHex(time, counterValue) {
@@ -347,7 +347,7 @@ function normalizeOpencodeReasoning(model, body) {
 
 // Chat Completions lane: the free backend validates reasoning_effort against the
 // plain OpenAI enum (none|minimal|low|medium|high|xhigh|max) and answers 400
-// "Invalid option" for anything else — including "auto", which adaptive thinking
+// "Invalid option" for anything else â€” including "auto", which adaptive thinking
 // (Claude Code's thinking:{type:"adaptive"}) arrives as. Omitting the field lets
 // the upstream pick its own default, which is what adaptive means; same rationale
 // as the Responses path above, which rejects "unknown variant `auto`".
@@ -355,7 +355,7 @@ function dropAdaptiveReasoningEffort(body) {
   if (body?.reasoning_effort === "auto") delete body.reasoning_effort;
 }
 
-<<<<<<< HEAD
+
 // The upstream free gate keys on the TLS ClientHello. Forward through the local
 // Bun sidecar, which owns the handshake and the proxy hop. wreq-js is kept as
 // the direct fallback; when neither transport is available the caller's native
@@ -483,7 +483,7 @@ export class OpenCodeExecutor extends BaseExecutor {
     // always stream upstream and let the handler layer aggregate for non-stream clients.
     if (body && typeof body === "object") body.stream = true;
     if (isResponsesModel(model || body?.model) && body && typeof body === "object") {
-      // ponytail: chỉ model đã xác nhận auto-only; mở allowlist khi có bằng chứng.
+      // ponytail: chá»‰ model Ä‘Ã£ xÃ¡c nháº­n auto-only; má»Ÿ allowlist khi cÃ³ báº±ng chá»©ng.
       if ("tool_choice" in body && body.tool_choice !== "auto"
         && this.config.quirks?.forceAutoToolChoiceModels?.includes(baseModelId(model))) {
         body.tool_choice = "auto";
@@ -494,7 +494,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         body.input = [{ type: "message", role: "user", content: [{ type: "input_text", text: "..." }] }];
       }
       // Responses API names the output cap max_output_tokens and takes thinking
-      // as reasoning:{effort,summary} — normalize the Chat fields at this boundary.
+      // as reasoning:{effort,summary} â€” normalize the Chat fields at this boundary.
       if (body.max_output_tokens === undefined) {
         if (body.max_completion_tokens !== undefined) body.max_output_tokens = body.max_completion_tokens;
         else if (body.max_tokens !== undefined) body.max_output_tokens = body.max_tokens;
@@ -518,7 +518,7 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   // The free gate keys on the TLS ClientHello, so a native Node fetch is refused
-<<<<<<< HEAD
+
   // no matter how faithful the body is. The Bun sidecar owns the handshake and
   // the proxy hop; wreq-js stays as the direct fallback. Fail-open: without
   // either transport the request still goes out on native fetch.
@@ -557,7 +557,7 @@ export class OpenCodeExecutor extends BaseExecutor {
       if (isAlive) {
         const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
         const timeStr = new Date().toLocaleTimeString("en-GB");
-        console.log(`[${timeStr}] ℹ️ [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
+        console.log(`[${timeStr}] â„¹ï¸ [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
 
         const messages = prepareServiceMessages(body);
         const serviceResponse = await executeServiceStream({
@@ -584,11 +584,11 @@ export class OpenCodeExecutor extends BaseExecutor {
         };
       }
       const timeStr = new Date().toLocaleTimeString("en-GB");
-      console.log(`[${timeStr}] ⚠️ [BRIDGE] OPENCODE daemon unreachable — falling back to TLS HTTP`);
+      console.log(`[${timeStr}] âš ï¸ [BRIDGE] OPENCODE daemon unreachable â€” falling back to TLS HTTP`);
     }
 
     const timeStr = new Date().toLocaleTimeString("en-GB");
-    console.log(`[${timeStr}] ℹ️ [DIRECT] OPENCODE | ${model}`);
+    console.log(`[${timeStr}] â„¹ï¸ [DIRECT] OPENCODE | ${model}`);
 
     const preparedCredentials = this.prepareRequestCredentials(args);
     const effectiveProxyOptions = proxyOptions || (credentials?.providerSpecificData?.connectionProxyEnabled && credentials?.providerSpecificData?.connectionProxyUrl
@@ -601,7 +601,7 @@ export class OpenCodeExecutor extends BaseExecutor {
 
     return super.execute({
       ...args,
-<<<<<<< HEAD
+
       credentials,
       directFetch: fetchFreeLane,
       proxyDirectFetch: true,
