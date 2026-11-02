@@ -253,12 +253,21 @@ async function getDispatcher(proxyUrl, insecure = false) {
 
 async function fetchWithTlsFallback(url, options, proxyUrl) {
   try {
+<<<<<<< HEAD
     // Protocol adapters that own their transport receive the resolved proxy so
     // they can keep the same egress. A null result falls through to the native
     // path, which keeps fail-open behaviour.
     if (options.directFetch && (!proxyUrl || options.proxyDirectFetch)) {
       const direct = await options.directFetch(url, options, proxyUrl || "");
       if (direct) return direct;
+=======
+    // Protocol adapters that own their transport (OpenCode TLS impersonation)
+    // must keep that fingerprint even when a proxy is configured. Pass the
+    // resolved proxy URL through so the adapter can apply it itself.
+    if (options.directFetch) {
+      const { directFetch, dispatcher, ...rest } = options;
+      return await directFetch(url, { ...rest, proxyUrl: proxyUrl || undefined });
+>>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
     }
     const dispatcher = proxyUrl ? await getDispatcher(proxyUrl) : undefined;
     return await originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
