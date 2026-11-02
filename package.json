@@ -69,5 +69,8 @@
   "overrides": {
     "dompurify": "^3.4.17",
     "ip-address": "^10.7.4"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }
