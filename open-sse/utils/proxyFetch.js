@@ -289,7 +289,7 @@ async function fetchWithTlsFallback(url, options, proxyUrl) {
 /**
  * Create HTTPS request with manual socket connection (bypass DNS)
  */
-async function createBypassRequest(parsedUrl, realIP, options) {
+;async function createBypassRequest(parsedUrl, realIP, options) {
   const httpsModule = await import("https");
   const netModule = await import("net");
   // CJS modules expose exports via .default in ESM dynamic import context
