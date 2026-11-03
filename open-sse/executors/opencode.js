@@ -430,7 +430,7 @@ async function fetchFreeLane(url, options, proxyUrl = "") {
     }
   }
   return null;
-=======
+
 function textFromServiceContent(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return content == null ? "" : String(content);
@@ -509,7 +509,6 @@ function prepareServiceToolChoice(toolChoice) {
     return { type: "function", function: { name: toolChoice.function.name } };
   }
   return undefined;
->>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
 }
 
 export class OpenCodeExecutor extends BaseExecutor {
@@ -575,15 +574,15 @@ export class OpenCodeExecutor extends BaseExecutor {
   // no matter how faithful the body is. The Bun sidecar owns the handshake and
   // the proxy hop; wreq-js stays as the direct fallback. Fail-open: without
   // either transport the request still goes out on native fetch.
-=======
+
   // no matter how faithful the body is. Route through the impersonating client.
   // proxyAwareFetch forwards `directFetch` even when a proxy is set so the
   // same TLS fingerprint rides the pool (wreq-js `proxy` option). Fail-open:
   // without wreq-js the request still goes out on native fetch instead of
   // erroring here.
->>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
+
   async execute(args) {
-<<<<<<< HEAD
+
     const credentials = this.prepareRequestCredentials(args);
     let providerOverrides = args?.providerOverrides;
     if (providerOverrides?.headers) {
@@ -614,7 +613,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         });
       },
       directFetchProxy: true,
-=======
+
     const { model, body, credentials, signal, proxyOptions } = args;
     const apiKey = credentials?.apiKey || credentials?.accessToken || credentials?.providerSpecificData?.apiKey;
     const isPublicAuth = !apiKey || apiKey === "public" || apiKey === "Bearer public";
@@ -690,7 +689,7 @@ export class OpenCodeExecutor extends BaseExecutor {
       credentials,
       directFetch: fetchFreeLane,
       proxyDirectFetch: true,
-=======
+
       proxyOptions: effectiveProxyOptions,
       credentials: preparedCredentials,
       directFetch: (url, options) => opencodeTlsFetch(url, {
@@ -698,8 +697,8 @@ export class OpenCodeExecutor extends BaseExecutor {
         headers: options.headers,
         body: options.body,
       }, { signal: options.signal, proxy: options.proxyUrl || proxyUrl }),
->>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
->>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
+
+
     });
   }
 
