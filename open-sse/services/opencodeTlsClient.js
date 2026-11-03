@@ -105,11 +105,7 @@ export function resetOpencodeTlsSession() {
  * ReadableStream, never buffered. Sockets are gracefully torn down when
  * the stream finishes or cancels.
  */
-<<<<<<< HEAD
 export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEFAULT_TIMEOUT_MS, proxyUrl } = {}) {
-=======
-export async function opencodeTlsFetch(url, init = {}, { signal, timeoutMs = DEFAULT_TIMEOUT_MS, proxy } = {}) {
->>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
   let session;
   try {
     session = FRESH_TLS ? await buildSession(proxyUrl) : await getSession(proxyUrl);
