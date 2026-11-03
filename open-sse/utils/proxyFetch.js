@@ -1,11 +1,11 @@
-import { Readable } from "stream";
+﻿import { Readable } from "stream";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
 
-// ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
+// â”€â”€â”€ TLS fingerprinting via got-scraping (browser-like JA3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Disabled: not in use. Kept commented for future re-enable.
 // Restore the original block to re-enable per-host JA3 spoofing.
 /*
@@ -97,7 +97,7 @@ async function tryGotScrapingFetch(url, options) {
 }
 */
 
-// DNS cache — use Map to avoid prototype pollution via malformed hostnames
+// DNS cache â€” use Map to avoid prototype pollution via malformed hostnames
 const DNS_CACHE = new Map();
 const TLS_CERT_ERRORS = new Set([
   "SELF_SIGNED_CERT_IN_CHAIN",
@@ -253,11 +253,29 @@ async function getDispatcher(proxyUrl, insecure = false) {
 
 async function fetchWithTlsFallback(url, options, proxyUrl) {
   try {
+<<<<<<< HEAD
     // Protocol adapters may need Node's HTTP/1 transport on the direct path.
     // When directFetchProxy is set (e.g. OpenCode TLS impersonation), directFetch
     // also handles proxy egress directly rather than escaping to Node's OpenSSL agent.
     if (options.directFetch && (options.directFetchProxy || !proxyUrl)) {
       return await options.directFetch(url, options, { proxyUrl });
+=======
+
+    // Protocol adapters that own their transport receive the resolved proxy so
+    // they can keep the same egress. A null result falls through to the native
+    // path, which keeps fail-open behaviour.
+    if (options.directFetch && (!proxyUrl || options.proxyDirectFetch)) {
+      const direct = await options.directFetch(url, options, proxyUrl || "");
+      if (direct) return direct;
+=======
+    // Protocol adapters that own their transport (OpenCode TLS impersonation)
+    // must keep that fingerprint even when a proxy is configured. Pass the
+    // resolved proxy URL through so the adapter can apply it itself.
+    if (options.directFetch) {
+      const { directFetch, dispatcher, ...rest } = options;
+      return await directFetch(url, { ...rest, proxyUrl: proxyUrl || undefined });
+>>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
+>>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
     }
     const dispatcher = proxyUrl ? await getDispatcher(proxyUrl) : undefined;
     return await originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
@@ -279,7 +297,7 @@ async function fetchWithTlsFallback(url, options, proxyUrl) {
 /**
  * Create HTTPS request with manual socket connection (bypass DNS)
  */
-async function createBypassRequest(parsedUrl, realIP, options) {
+;async function createBypassRequest(parsedUrl, realIP, options) {
   const httpsModule = await import("https");
   const netModule = await import("net");
   // CJS modules expose exports via .default in ESM dynamic import context
@@ -335,6 +353,16 @@ async function createBypassRequest(parsedUrl, realIP, options) {
   });
 }
 
+/**
+ * Resolve the proxy URL that proxyAwareFetch would use for this target.
+ * Returns null when the request should go out directly.
+ */
+export function resolveProxyUrl(targetUrl, proxyOptions = null) {
+  const connectionProxyUrl = resolveConnectionProxyUrl(targetUrl, proxyOptions);
+  const envProxyUrl = connectionProxyUrl ? null : normalizeProxyUrl(getEnvProxyUrl(targetUrl));
+  return connectionProxyUrl || envProxyUrl;
+}
+
 export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   const targetUrl = typeof url === "string" ? url : url.toString();
 
@@ -353,14 +381,12 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     return originalFetch(vercelRelayUrl, { ...options, headers: relayHeaders });
   }
 
-  const connectionProxyUrl = resolveConnectionProxyUrl(targetUrl, proxyOptions);
-  const envProxyUrl = connectionProxyUrl ? null : normalizeProxyUrl(getEnvProxyUrl(targetUrl));
-  const proxyUrl = connectionProxyUrl || envProxyUrl;
+  const proxyUrl = resolveProxyUrl(targetUrl, proxyOptions);
 
   // MITM DNS bypass: for known MITM-intercepted hosts, resolve real IP to avoid DNS spoof
   if (shouldBypassMitmDns(targetUrl)) {
     if (proxyUrl) {
-      // Proxy resolves DNS externally (not affected by /etc/hosts) — use proxy directly
+      // Proxy resolves DNS externally (not affected by /etc/hosts) â€” use proxy directly
       try {
         return await fetchWithTlsFallback(url, options, proxyUrl);
       } catch (proxyError) {
@@ -370,7 +396,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
         console.warn(`[ProxyFetch] Proxy failed, falling back to direct bypass: ${proxyError.message}`);
       }
     }
-    // No proxy — manually resolve real IP to bypass DNS spoof
+    // No proxy â€” manually resolve real IP to bypass DNS spoof
     try {
       const parsedUrl = new URL(targetUrl);
       const realIP = await resolveRealIP(parsedUrl.hostname);
@@ -394,8 +420,8 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   }
 
   // Strict mode means "never leave over the direct IP". Reaching here with a
-  // proxy configured but unresolved is exactly that case — an inactive or
-  // empty pool, or every proxy removed — so refuse instead of silently
+  // proxy configured but unresolved is exactly that case â€” an inactive or
+  // empty pool, or every proxy removed â€” so refuse instead of silently
   // exposing the real address (#4333). The catch blocks above only cover a
   // proxy that was actually tried.
   //
@@ -411,7 +437,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
     throw new Error("[ProxyFetch] Proxy required but none resolved (strictProxy=true)");
   }
 
-  // got-scraping disabled — use native fetch directly
+  // got-scraping disabled â€” use native fetch directly
   // (Re-enable per-host by wrapping with tryGotScrapingFetch when needed)
   return fetchWithTlsFallback(url, options, null);
 }
@@ -423,7 +449,7 @@ async function patchedFetch(url, options = {}) {
   return proxyAwareFetch(url, options, null);
 }
 
-// Idempotency guard — only patch once to avoid wrapping multiple times
+// Idempotency guard â€” only patch once to avoid wrapping multiple times
 if (globalThis.fetch !== patchedFetch) {
   globalThis.fetch = patchedFetch;
 }

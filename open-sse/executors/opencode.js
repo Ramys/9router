@@ -1,5 +1,12 @@
+﻿import {
+  isOpencodeServiceAlive,
+  getDaemonForProxy,
+  executeServiceStream,
+  resolveClientWorkingDirectory,
+} from "../services/opencodeServiceBridge.js";
 import crypto from "crypto";
 import { BaseExecutor } from "./base.js";
+import { FORMATS } from "../translator/formats.js";
 import { PROVIDERS } from "../config/providers.js";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 import { getThinkingLevels } from "../providers/thinkingLevels.js";
@@ -8,6 +15,7 @@ import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
 import { applyFingerprintTools } from "../utils/opencodeFingerprint.js";
 import { opencodeTlsFetch } from "../services/opencodeTlsClient.js";
+import { fetchViaTransport } from "../utils/opencodeTransport.js";
 import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
 import {
   normalizeResponsesInput,
@@ -68,7 +76,7 @@ function unstableRandom() {
 
 // Session prefix = 12 hex of ~(timeMs * 0x1000 + counter), low 48 bits, like the CLI.
 // Upstream decodes it and rejects a non-small counter with 403 FreeTierError
-// (live probes: counter 0–16 pass, >=100 fail), so the counter must stay real.
+// (live probes: counter 0â€“16 pass, >=100 fail), so the counter must stay real.
 const SESSION_PREFIX_MASK = (1n << 48n) - 1n;
 
 function descendingTimeHex(time, counterValue) {
@@ -389,12 +397,119 @@ function normalizeOpencodeReasoning(model, body) {
 
 // Chat Completions lane: the free backend validates reasoning_effort against the
 // plain OpenAI enum (none|minimal|low|medium|high|xhigh|max) and answers 400
-// "Invalid option" for anything else — including "auto", which adaptive thinking
+// "Invalid option" for anything else â€” including "auto", which adaptive thinking
 // (Claude Code's thinking:{type:"adaptive"}) arrives as. Omitting the field lets
 // the upstream pick its own default, which is what adaptive means; same rationale
 // as the Responses path above, which rejects "unknown variant `auto`".
 function dropAdaptiveReasoningEffort(body) {
   if (body?.reasoning_effort === "auto") delete body.reasoning_effort;
+}
+
+
+// The upstream free gate keys on the TLS ClientHello. Forward through the local
+// Bun sidecar, which owns the handshake and the proxy hop. wreq-js is kept as
+// the direct fallback; when neither transport is available the caller's native
+// fetch still runs (fail-open).
+async function fetchFreeLane(url, options, proxyUrl = "") {
+  const viaTransport = await fetchViaTransport(url, {
+    method: options.method,
+    headers: options.headers,
+    body: options.body,
+  }, { proxyUrl, signal: options.signal });
+  if (viaTransport) return viaTransport;
+
+  if (!proxyUrl) {
+    try {
+      return await opencodeTlsFetch(url, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+      }, { signal: options.signal });
+    } catch (error) {
+      if (error?.name !== "OpencodeTlsUnavailableError") throw error;
+    }
+  }
+  return null;
+=======
+function textFromServiceContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content == null ? "" : String(content);
+  return content.map((part) => {
+    if (typeof part === "string") return part;
+    if (typeof part?.text === "string") return part.text;
+    if (typeof part?.value === "string") return part.value;
+    return "";
+  }).filter(Boolean).join("\n");
+}
+
+function responsesInputToServiceMessages(input, instructions) {
+  const messages = [];
+  const systemText = textFromServiceContent(instructions);
+  if (systemText) messages.push({ role: "system", content: systemText });
+  if (!Array.isArray(input)) return messages;
+
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    if (item.type === "message") {
+      messages.push({
+        role: item.role || "user",
+        content: textFromServiceContent(item.content),
+      });
+    } else if (item.type === "function_call") {
+      messages.push({
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: item.call_id || item.id,
+          type: "function",
+          function: {
+            name: item.name,
+            arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments || {}),
+          },
+        }],
+      });
+    } else if (item.type === "function_call_output") {
+      messages.push({
+        role: "tool",
+        tool_call_id: item.call_id || item.id,
+        content: serializeServiceOutput(item.output),
+      });
+    }
+  }
+  return messages;
+}
+
+function serializeServiceOutput(output) {
+  if (typeof output === "string") return output;
+  if (output == null) return "";
+  try { return JSON.stringify(output); } catch { return String(output); }
+}
+
+function prepareServiceMessages(body) {
+  if (Array.isArray(body?.messages) && body.messages.length > 0) {
+    return body.messages;
+  }
+  if (Array.isArray(body?.input)) {
+    return responsesInputToServiceMessages(body.input, body.instructions);
+  }
+  if (typeof body?.prompt === "string" && body.prompt.trim()) {
+    return [{ role: "user", content: body.prompt }];
+  }
+  if (typeof body?.input === "string" && body.input.trim()) {
+    return [{ role: "user", content: body.input }];
+  }
+  return [];
+}
+
+function prepareServiceToolChoice(toolChoice) {
+  if (typeof toolChoice === "string") return toolChoice;
+  if (!toolChoice || typeof toolChoice !== "object" || Array.isArray(toolChoice)) return undefined;
+  if (typeof toolChoice.mode === "string") return toolChoice.mode;
+  if (toolChoice.type === "function" && toolChoice.function?.name) {
+    return { type: "function", function: { name: toolChoice.function.name } };
+  }
+  return undefined;
+>>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
 }
 
 export class OpenCodeExecutor extends BaseExecutor {
@@ -418,7 +533,7 @@ export class OpenCodeExecutor extends BaseExecutor {
     // always stream upstream and let the handler layer aggregate for non-stream clients.
     if (body && typeof body === "object") body.stream = true;
     if (isResponsesModel(model || body?.model) && body && typeof body === "object") {
-      // ponytail: chỉ model đã xác nhận auto-only; mở allowlist khi có bằng chứng.
+      // ponytail: chá»‰ model Ä‘Ã£ xÃ¡c nháº­n auto-only; má»Ÿ allowlist khi cÃ³ báº±ng chá»©ng.
       if ("tool_choice" in body && body.tool_choice !== "auto"
         && this.config.quirks?.forceAutoToolChoiceModels?.includes(baseModelId(model))) {
         body.tool_choice = "auto";
@@ -429,7 +544,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         body.input = [{ type: "message", role: "user", content: [{ type: "input_text", text: "..." }] }];
       }
       // Responses API names the output cap max_output_tokens and takes thinking
-      // as reasoning:{effort,summary} — normalize the Chat fields at this boundary.
+      // as reasoning:{effort,summary} â€” normalize the Chat fields at this boundary.
       if (body.max_output_tokens === undefined) {
         if (body.max_completion_tokens !== undefined) body.max_output_tokens = body.max_completion_tokens;
         else if (body.max_tokens !== undefined) body.max_output_tokens = body.max_tokens;
@@ -456,11 +571,19 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   // The free gate keys on the TLS ClientHello, so a native Node fetch is refused
-  // no matter how faithful the body is. Route through the impersonating client
-  // and keep proxy handling on the existing path (proxyAwareFetch delegates to
-  // `directFetch` when no proxy is configured). Fail-open: without wreq-js the
-  // request still goes out on native fetch instead of erroring here.
+
+  // no matter how faithful the body is. The Bun sidecar owns the handshake and
+  // the proxy hop; wreq-js stays as the direct fallback. Fail-open: without
+  // either transport the request still goes out on native fetch.
+=======
+  // no matter how faithful the body is. Route through the impersonating client.
+  // proxyAwareFetch forwards `directFetch` even when a proxy is set so the
+  // same TLS fingerprint rides the pool (wreq-js `proxy` option). Fail-open:
+  // without wreq-js the request still goes out on native fetch instead of
+  // erroring here.
+>>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
   async execute(args) {
+<<<<<<< HEAD
     const credentials = this.prepareRequestCredentials(args);
     let providerOverrides = args?.providerOverrides;
     if (providerOverrides?.headers) {
@@ -491,6 +614,92 @@ export class OpenCodeExecutor extends BaseExecutor {
         });
       },
       directFetchProxy: true,
+=======
+    const { model, body, credentials, signal, proxyOptions } = args;
+    const apiKey = credentials?.apiKey || credentials?.accessToken || credentials?.providerSpecificData?.apiKey;
+    const isPublicAuth = !apiKey || apiKey === "public" || apiKey === "Bearer public";
+    const hasExplicitApiKey = !isPublicAuth;
+    const isTestEnv = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+    const proxyUrl = (proxyOptions?.connectionProxyEnabled && proxyOptions?.connectionProxyUrl)
+      ? proxyOptions.connectionProxyUrl
+      : (credentials?.providerSpecificData?.connectionProxyEnabled && credentials?.providerSpecificData?.connectionProxyUrl)
+        ? credentials.providerSpecificData.connectionProxyUrl
+        : "";
+    const proxyNoProxy = proxyOptions?.connectionNoProxy
+      || credentials?.providerSpecificData?.connectionNoProxy
+      || "";
+
+    const useServiceDaemon = credentials?.providerSpecificData?.useServiceDaemon !== false;
+
+    // Dual-Mode Architecture:
+    // Prefer the local OpenCode daemon when it is actually reachable. A missing
+    // or crashed daemon used to 502 the whole free lane; fall through to the
+    // TLS HTTP path instead so the request still reaches opencode.ai.
+    if (!isTestEnv && !hasExplicitApiKey && useServiceDaemon) {
+      const daemon = await getDaemonForProxy(proxyUrl, { noProxy: proxyNoProxy, apiKey });
+      const isAlive = await isOpencodeServiceAlive(daemon);
+
+      if (isAlive) {
+        const directory = resolveClientWorkingDirectory(credentials, body, body?.messages);
+        const timeStr = new Date().toLocaleTimeString("en-GB");
+        console.log(`[${timeStr}] â„¹ï¸ [BRIDGE] OPENCODE | ${model} | daemon=${daemon?.url || "127.0.0.1"}`);
+
+        const messages = prepareServiceMessages(body);
+        const serviceResponse = await executeServiceStream({
+          model,
+          body,
+          messages,
+          tools: body?.tools || [],
+          toolChoice: prepareServiceToolChoice(body?.tool_choice),
+          credentials: this.prepareRequestCredentials({ body, credentials }),
+          proxyUrl,
+          proxyNoProxy,
+          signal,
+        });
+        const session = credentials?.[SESSION_FIELD] || resolveOpencodeSession(body, credentials);
+        return {
+          response: serviceResponse,
+          url: "http://127.0.0.1/api/session/prompt",
+          headers: {
+            "Content-Type": "text/event-stream",
+            "x-opencode-session": session,
+          },
+          transformedBody: body,
+          responseFormat: FORMATS.OPENAI,
+        };
+      }
+      const timeStr = new Date().toLocaleTimeString("en-GB");
+      console.log(`[${timeStr}] âš ï¸ [BRIDGE] OPENCODE daemon unreachable â€” falling back to TLS HTTP`);
+    }
+
+    const timeStr = new Date().toLocaleTimeString("en-GB");
+    console.log(`[${timeStr}] â„¹ï¸ [DIRECT] OPENCODE | ${model}`);
+
+    const preparedCredentials = this.prepareRequestCredentials(args);
+    const effectiveProxyOptions = proxyOptions || (credentials?.providerSpecificData?.connectionProxyEnabled && credentials?.providerSpecificData?.connectionProxyUrl
+      ? {
+          connectionProxyEnabled: true,
+          connectionProxyUrl: credentials.providerSpecificData.connectionProxyUrl,
+          connectionNoProxy: credentials.providerSpecificData.connectionNoProxy || "",
+        }
+      : null);
+
+    return super.execute({
+      ...args,
+
+      credentials,
+      directFetch: fetchFreeLane,
+      proxyDirectFetch: true,
+=======
+      proxyOptions: effectiveProxyOptions,
+      credentials: preparedCredentials,
+      directFetch: (url, options) => opencodeTlsFetch(url, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+      }, { signal: options.signal, proxy: options.proxyUrl || proxyUrl }),
+>>>>>>> 411ef200d3058bd347c7b77c56313626aa2e06e8
+>>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
     });
   }
 

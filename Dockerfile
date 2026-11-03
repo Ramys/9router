@@ -20,8 +20,7 @@ ARG NPM_REGISTRY
 RUN apk add --no-cache python3 make g++ linux-headers
 
 COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install \
+RUN npm install \
       --registry="${NPM_REGISTRY}" \
       --fetch-retries=5 \
       --fetch-retry-factor=2 \
@@ -39,8 +38,7 @@ RUN npm run build
 # them, so OpenCode Free fails with HTTP 502 ("resolve is undefined").
 # Install them (with their native bindings/transitive deps) in an isolated dir
 # so the runner stage can copy them into /app/node_modules.
-RUN --mount=type=cache,target=/root/.npm \
-    mkdir -p /opt/lazy-runtime && cd /opt/lazy-runtime && \
+RUN mkdir -p /opt/lazy-runtime && cd /opt/lazy-runtime && \
     npm init -y >/dev/null && \
     npm install --no-save \
       --registry="${NPM_REGISTRY}" \
@@ -50,6 +48,10 @@ RUN --mount=type=cache,target=/root/.npm \
       --fetch-retry-maxtimeout=120000 \
       --fetch-timeout=300000 \
       wreq-js playwright-core
+
+# The OpenCode free lane is forwarded through a Bun sidecar: Bun's TLS stack is
+# accepted by the upstream gate where Node's is refused.
+FROM oven/bun:1-alpine AS bunbin
 
 FROM ${NODE_IMAGE} AS runner
 ARG ALPINE_MIRROR
@@ -74,6 +76,9 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/custom-server.js ./custom-server.js
 COPY --from=builder /app/open-sse ./open-sse
+# The Bun transport sidecar is not traced into the standalone build.
+COPY --from=builder /app/scripts/opencode-transport.mjs ./scripts/opencode-transport.mjs
+COPY --from=bunbin /usr/local/bin/bun /usr/local/bin/bun
 # Next file tracing can omit sibling files; MITM runs server.js as a separate process.
 COPY --from=builder /app/src/mitm ./src/mitm
 # Standalone node_modules may omit deps only required by the MITM child process.

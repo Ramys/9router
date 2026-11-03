@@ -97,7 +97,11 @@ export class BaseExecutor {
     return { status: response.status, message: bodyText || `HTTP ${response.status}` };
   }
 
+<<<<<<< HEAD
   async execute({ model, body, stream, credentials, signal, log, proxyOptions = null, providerOverrides = null, directFetch = null, directFetchProxy = false }) {
+=======
+  async execute({ model, body, stream, credentials, signal, log, proxyOptions = null, providerOverrides = null, directFetch = null, proxyDirectFetch = false }) {
+>>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
     const fallbackCount = this.getFallbackCount();
     let lastError = null;
     let lastStatus = 0;
@@ -149,8 +153,14 @@ export class BaseExecutor {
           body: bodyStr,
           signal: mergedSignal,
           // Protocol adapters that need their own transport (opencode's TLS
+<<<<<<< HEAD
           // fingerprint) override the direct path; proxies still take priority unless directFetchProxy is set.
           ...(directFetch ? { directFetch, directFetchProxy } : {}),
+=======
+          // fingerprint) override the direct path; proxies still take priority
+          // unless the adapter can carry the proxy hop itself.
+          ...(directFetch ? { directFetch, proxyDirectFetch } : {}),
+>>>>>>> 3c17ca55f089b6ff4a977d71acf1ff9237168921
         }, proxyOptions);
         clearTimeout(connectTimer);
         const ct = response.headers?.get?.("content-type") || "";
